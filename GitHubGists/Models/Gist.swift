@@ -8,7 +8,7 @@
 
 import Foundation
 
-struct Gist {
+struct Gist: Identifiable {
     static let iso8601DateFormatter = ISO8601DateFormatter()
     
     static let dateFormatter: DateFormatter = {
@@ -18,6 +18,7 @@ struct Gist {
         return formatter
     }()
     
+    let id = UUID()
     let htmlURL: URL
     let updatedAtDate: Date
     let updatedAt: String

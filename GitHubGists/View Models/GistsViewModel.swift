@@ -7,64 +7,55 @@
 //
 
 import Foundation
+import Combine
 
-final class GistsViewModel {
-    var gists = [Gist]()
+final class GistsViewModel: ObservableObject {
+    @Published var searchText = ""
+    @Published var gists: [Gist] = []
     
-    private var task: URLSessionTask?
+    private let maxRetries: Int
+    private var subscriptions = Set<AnyCancellable>()
     
-    func fetchGists(for username: String, completion: @escaping () -> Void) {
-        guard username.count > 2,
-            let url = url(for: username)
-            else {
-                gists = []
-                return completion()
-        }
+    init(maxRetries: UInt = 2) {
+        self.maxRetries = Int(maxRetries)
         
-        getGists(for: url, completion: completion)
+        $searchText
+            .debounce(for: 0.3, scheduler: DispatchQueue.main)
+            .flatMap(fetchGists(for:))
+            .map { $0.sorted(by: >) }
+            .assign(to: \.gists, on: self)
+            .store(in: &subscriptions)
     }
     
-    private func getGists(for url: URL, maxRetries: UInt = 2, completion: @escaping () -> Void) {
-        task?.cancel()
-        
-        task = URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-            guard let self = self else { return }
-            
-            if error != nil {
-                if maxRetries > 0 {
-                    self.getGists(for: url, maxRetries: maxRetries - 1, completion: completion)
-                } else {
-                    completion()
+    private func fetchGists(for username: String) -> AnyPublisher<[Gist], Never> {
+        Just(username)
+            .handleEvents(receiveOutput: { [weak self] in
+                if $0.count < 3 {
+                    self?.gists = []
                 }
-            }
-            
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                
-                if let data = data {
-                    do {
-                        let gists = try JSONDecoder().decode([Gist].self, from: data)
-                        self.gists = gists.sorted(by: >)
-                        completion()
-                    } catch {
-                        self.gists = []
-                        completion()
-                    }
-                } else {
-                    self.gists = []
-                    completion()
-                }
-            }
-        }
-        
-        task?.resume()
+            })
+            .filter { $0.count > 2 }
+            .tryMap(url(for:))
+            .flatMap(gistsPublisher(for:))
+            .replaceError(with: [])
+            .receive(on: DispatchQueue.main)
+            .eraseToAnyPublisher()
     }
     
-    private func url(for username: String) -> URL? {
+    private func gistsPublisher(for url: URL) -> AnyPublisher<[Gist], Error> {
+        URLSession.shared.dataTaskPublisher(for: url)
+            .retry(maxRetries)
+            .map(\.data)
+            .decode(type: [Gist].self, decoder: JSONDecoder())
+            .eraseToAnyPublisher()
+    }
+    
+    private func url(for username: String) throws -> URL {
         var components = URLComponents()
         components.scheme = "https"
         components.host = "api.github.com"
         components.path = "/users/\(username)/gists"
-        return components.url
+        guard let url = components.url else { throw URLError(.badURL) }
+        return url
     }
 }

@@ -6,7 +6,8 @@
 //  Copyright © 2020 Scott Gardner. All rights reserved.
 //
 
-import UIKit
+import SwiftUI
+import Combine
 
 final class RemoteImageService {
     static let shared = RemoteImageService()
@@ -14,28 +15,22 @@ final class RemoteImageService {
     private let cache = NSCache<NSString, UIImage>()
     
     private init() { }
-    
-    func getImage(at url: URL, completion: @escaping (UIImage) -> Void) -> URLSessionDataTask? {
+        
+    func avatarPublisher(for url: URL) -> AnyPublisher<UIImage, Never> {
         if let image = cache.object(forKey: url.absoluteString as NSString) {
-            completion(image)
-            return nil
-        } else {
-            let task = URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-                guard let self = self,
-                    let data = data,
-                    let image = UIImage(data: data)
-                    else { return }
-                
-                self.cache.setObject(self.resize(image: image), forKey: url.absoluteString as NSString)
-                
-                DispatchQueue.main.async {
-                    completion(image)
-                }
-            }
-            
-            task.resume()
-            return task
+            return Just(image).eraseToAnyPublisher()
         }
+        
+        return URLSession.shared.dataTaskPublisher(for: url)
+            .retry(2)
+            .map(\.data)
+            .compactMap(UIImage.init)
+            .compactMap { [weak self] in
+                self?.resize(image: $0)
+            }
+            .replaceError(with: UIImage(systemName: "person.circle.fill")!)
+            .receive(on: DispatchQueue.main)
+            .eraseToAnyPublisher()
     }
     
     private func resize(image: UIImage, size: CGSize = CGSize(width: 64, height: 64)) -> UIImage {

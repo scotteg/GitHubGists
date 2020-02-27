@@ -7,22 +7,18 @@
 //
 
 import UIKit
+import SwiftUI
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     lazy var window: UIWindow? = UIWindow(frame: UIScreen.main.bounds)
     
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-        guard let windowScene = scene as? UIWindowScene,
-            let window = window
-            else { return }
-        
-        window.windowScene = windowScene
-        let rootViewController = GistsViewController()
-        rootViewController.view.backgroundColor = .white
-        let navigationController = UINavigationController(rootViewController: rootViewController)
-        navigationController.navigationBar.prefersLargeTitles = true
-        window.rootViewController = navigationController
+        guard let windowScene = scene as? UIWindowScene else { return }
+        let window = UIWindow(windowScene: windowScene)
+        let contentView = ContentView()
+        window.rootViewController = UIHostingController(rootView: contentView)
         window.makeKeyAndVisible()
+        self.window = window
     }
     
     func sceneDidDisconnect(_ scene: UIScene) {

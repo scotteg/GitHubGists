@@ -6,24 +6,26 @@
 //  Copyright © 2020 Scott Gardner. All rights reserved.
 //
 
-import UIKit
+import SwiftUI
+import Combine
 
-final class GistCellViewModel {
+final class GistCellViewModel: ObservableObject {
+    @Published var avatarImage = Image(systemName: "person.circle.fill")
     let gist: Gist
     lazy var gistDescription = gist.gistDescription.trimmingCharacters(in: .whitespacesAndNewlines)
     lazy var lastUpdatedString = "Last updated " + gist.updatedAt
     lazy var urlString = gist.htmlURL.absoluteString
-    var task: URLSessionTask?
+    private var subscriptions = Set<AnyCancellable>()
     
     init(gist: Gist) {
         self.gist = gist
-    }
-    
-    func fetchAvatar(completion: @escaping (UIImage) -> Void) {
-        task = RemoteImageService.shared.getImage(at: gist.owner.avatarURL, completion: completion)
-    }
-    
-    func cancelFetchAvatar() {
-        task?.cancel()
+        
+        Just(gist)
+            .map(\.owner.avatarURL)
+            .flatMap(RemoteImageService.shared.avatarPublisher(for:))
+            .map(Image.init)
+            .receive(on: DispatchQueue.main)
+            .assign(to: \.avatarImage, on: self)
+            .store(in: &subscriptions)
     }
 }
